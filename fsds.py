@@ -4,15 +4,18 @@ import sys, os
 fsds_lib_path = os.path.abspath("python-client")
 sys.path.insert(0, fsds_lib_path)
 
-#import time
+import time
 import math
 import fsds #type: ignore
 import numpy as np
 import pandas as pd
 
 #Plotting imports
+import matplotlib
+matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from collections import deque
+from PyQt5 import QtWidgets
 from matplotlib.patches import FancyArrowPatch
 
 params = {
@@ -26,12 +29,12 @@ params = {
     'V_window_size': 50, #XLength of velocity window
 
     #Car data
-    #'wheelbase': 0.76, #metres
-    'wheelbase': 1.6,
+    'wheelbase': 0.76, #metres
+    'steering_mult': 2.5,
     'steering_coeff': 0.2422, #Input [-1,1] * coeff = steering angle (rad)
 
     #Simulator
-    'velocity_mult': 0.8, #Factor of ideal velocity to target, 1=normal, 0.6=testing
+    'velocity_mult': 0.9, #Factor of ideal velocity to target, 1=normal, 0.6=testing
     'target_dist': 10, #Distance to steering target point
 
     #Main loop
@@ -100,11 +103,11 @@ def get_angle_between(vector1, vector2):
     return np.arctan2(cross, dot)
 
 class Plotter:
-    def __init__(self, max_V=90):
+    def __init__(self, app, max_V=90):
         plt.ion()
 
         self.fig_main, self.ax_main = plt.subplots(2, 1)
-        self.root = self.fig_main.canvas.manager.window
+        self.app = app
 
         self.ax_main[0].set_xlim(-95,100)
         self.ax_main[0].set_ylim(-95, 10)
@@ -171,7 +174,7 @@ class Plotter:
 
     def refresh(self):
         self.fig_main.canvas.draw_idle()
-        self.fig_main.canvas.start_event_loop(0.001)
+        self.app.processEvents()
 
 class Controller:
     def __init__(self):
@@ -198,7 +201,7 @@ class Controller:
         target_distance = np.linalg.norm(target_vector)
         target_angle = get_angle_between(target_vector, current_velocity)
 
-        required_angle = np.arctan((2 * params['wheelbase'] * np.sin(target_angle))/target_distance)
+        required_angle = np.arctan((params['steering_mult'] * 2 * params['wheelbase'] * np.sin(target_angle))/target_distance)
 
         required_steering = np.clip(required_angle/params['steering_coeff'], -max_steering, max_steering)
         car_controls.steering = required_steering
@@ -273,12 +276,12 @@ class Simulator:
 
 if __name__ == '__main__':
 
-    track_data = preprocess_track_data(
-        raceline_path
-    )
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
+
+    track_data = preprocess_track_data(raceline_path)
 
     #Initialise plots
-    plot = Plotter(max_V=max(track_data['V']))
+    plot = Plotter(app=app, max_V=max(track_data['V']))
     plot.refresh_racing_line(track_data['x'], track_data['y'])
     plot.refresh()
     
@@ -286,9 +289,8 @@ if __name__ == '__main__':
     sim = Simulator(track_data=track_data)
     client = sim.client
 
-    def tick():
+    while True:
         prev_index = sim.progress_index
-
         sim.update_car_state()
         sim.control_vehicle()
 
@@ -299,7 +301,4 @@ if __name__ == '__main__':
             plot.refresh_velocities(sim.total_distanced_travelled, sim.current_speed_magnitude, track_data['V'][sim.progress_index]*sim.VELOCITY_MULT)
         plot.refresh()
 
-        plot.root.after(params['tick_rate'], tick)
-
-    plot.root.after(0, tick)
-    plot.root.mainloop()
+        time.sleep(params['tick_rate']/1000)
