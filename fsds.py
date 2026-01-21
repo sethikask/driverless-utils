@@ -34,7 +34,7 @@ params = {
     'steering_coeff': 0.2422, #Input [-1,1] * coeff = steering angle (rad)
 
     #Simulator
-    'velocity_mult': 0.9, #Factor of ideal velocity to target, 1=normal, 0.6=testing
+    'velocity_mult': 1.0, #Factor of ideal velocity to target, 1=normal, 0.6=testing
     'target_dist': 10, #Distance to steering target point
 
     #Main loop
@@ -191,9 +191,9 @@ class Controller:
         return car_controls
 
     def calculate_braking(self, car_controls, v_current_magnitude, v_desired):
-        brake_coeff = 0.1
-        if (v_desired < v_current_magnitude):
-            car_controls.brake = abs(v_desired - v_current_magnitude) * brake_coeff
+        brake_coeff = 0.2
+        if (v_desired - v_current_magnitude) < -0.75:
+            car_controls.brake = abs(v_desired-v_current_magnitude) * brake_coeff
         return car_controls
     
     def calculate_steering(self, car_controls, current_velocity, target_vector):
@@ -243,6 +243,10 @@ class Simulator:
         self.current_position = self.carState.kinematics_estimated.position
         self.current_position = np.array([self.current_position.x_val, self.current_position.y_val, self.current_position.z_val])
 
+        self.current_acceleration = self.carState.kinematics_estimated.linear_acceleration
+        self.current_acceleration = np.array([self.current_acceleration.x_val, self.current_acceleration.y_val, self.current_acceleration.z_val])
+        self.current_acceleration_magnitude = np.linalg.norm(self.current_acceleration)
+
         target_position=np.array([self.track_data['x'][self.target_index], self.track_data['y'][self.target_index], self.track_data['z'][self.target_index]])
         self.target_vector = calculate_target_vector(self.current_position, target_position)
 
@@ -267,7 +271,7 @@ class Simulator:
 
         #Use current position for desired velocity, target position for desired steering
         car_controls = self.controller.calculate_throttle(car_controls, self.current_speed_magnitude, v_desired)
-        #car_controls = self.controller.calculate_braking(car_controls, self.current_speed_magnitude, v_desired)
+        car_controls = self.controller.calculate_braking(car_controls, self.current_speed_magnitude, v_desired)
         car_controls = self.controller.calculate_steering(car_controls, self.current_speed, self.target_vector)
 
         #print(car_controls.throttle, car_controls.brake, car_controls.steering)
